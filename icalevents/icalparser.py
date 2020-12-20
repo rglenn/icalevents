@@ -276,6 +276,11 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     else:
         cal_tz = UTC
 
+    # If a X-WR-TIMEZONE is specified, use that as the calendar tz
+    wr_tz = calendar.get('X-WR-TIMEZONE', None)
+    if wr_tz:
+        cal_tz = timezone(wr_tz)
+
     start = normalize(start, cal_tz)
     end = normalize(end, cal_tz)
 
