@@ -13,7 +13,7 @@ from dateutil.tz import UTC, gettz
 from icalendar import Calendar
 from icalendar.prop import vDDDLists, vText
 from pytz import timezone
-
+import pytz
 
 def now():
     """
@@ -21,7 +21,7 @@ def now():
 
     :return: now as datetime with timezone
     """
-    return datetime.now(UTC)
+    return datetime.now(pytz.utc)
 
 
 class Event:
@@ -147,7 +147,7 @@ def encode(value: Optional[vText]) -> Optional[str]:
         return str(value.encode('utf-8'))
 
 
-def create_event(component, tz=UTC):
+def create_event(component, tz=pytz.utc):
     """
     Create an event from its iCal representation.
 
@@ -212,7 +212,7 @@ def create_event(component, tz=UTC):
     return event
 
 
-def normalize(dt, tz=UTC):
+def normalize(dt, tz=pytz.utc):
     """
     Convert date or datetime to datetime with timezone.
 
@@ -230,7 +230,7 @@ def normalize(dt, tz=UTC):
     if dt.tzinfo:
         dt = dt.astimezone(tz)
     else:
-        dt = dt.replace(tzinfo=tz)
+        dt = tz.localize(dt)
 
     return dt
 
@@ -274,21 +274,23 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     if len(timezones) == 1:
         cal_tz = gettz(list(timezones)[0])
     else:
-        cal_tz = UTC
+        cal_tz = pytz.utc
 
     # If a X-WR-TIMEZONE is specified, use that as the calendar tz
     wr_tz = calendar.get('X-WR-TIMEZONE', None)
     if wr_tz:
         cal_tz = timezone(wr_tz)
 
-    start = normalize(start, cal_tz)
-    end = normalize(end, cal_tz)
+    _start = normalize(start, cal_tz)
+    _end = normalize(end, cal_tz)
 
     found = []
 
     # Skip dates that are stored as exceptions.
     exceptions = {}
     for component in calendar.walk():
+        start = _start
+        end = _end
         if component.name == "VEVENT":
             e = create_event(component, cal_tz)
 
@@ -321,13 +323,13 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
                 # datetime values.
                 e.start = datetime.combine(e.start.date(), datetime.min.time())
                 e.end = datetime.combine(e.end.date(), datetime.min.time())
-                start = datetime.combine(start, datetime.min.time())
-                end = datetime.combine(end, datetime.min.time())
+                e.start = normalize(e.start, cal_tz)
+                e.end = normalize(e.end, cal_tz)
             else:
                 # Work out the staring and ending timezone. We don't do
                 # this for all-day appointments because they aren't really
                 # in a timezone.
-                if e.start.tzinfo != UTC:
+                if e.start.tzinfo != pytz.utc:
                     if str(e.start.tzinfo) in timezones:
                         start_tz = timezones[str(e.start.tzinfo)]
                     else:
@@ -336,7 +338,7 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
                         except:
                             pass
 
-                if e.end.tzinfo != UTC:
+                if e.end.tzinfo != pytz.utc:
                     if str(e.end.tzinfo) in timezones:
                         end_tz = timezones[str(e.end.tzinfo)]
                     else:
@@ -393,7 +395,7 @@ def parse_events(content, start=None, end=None, default_span=timedelta(days=7)):
     return found
 
 
-def parse_rrule(component, tz=UTC):
+def parse_rrule(component, tz=pytz.utc):
     """
     Extract a dateutil.rrule object from an icalendar component. Also includes
     the component's dtstart and exdate properties. The rdate and exrule
